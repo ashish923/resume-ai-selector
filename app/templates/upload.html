@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-section">
+    <h2>Upload Resumes & Job Description</h2>
+    <p class="page-desc">Upload candidate resumes and paste the job description to start screening.</p>
+
+    <div class="upload-grid">
+        <!-- Left: Resume Upload Zone -->
+        <div class="upload-column">
+            <h3>Resumes</h3>
+            <div class="upload-zone" id="dropZone">
+                <div class="upload-icon">📂</div>
+                <p class="upload-text">Drag & drop resumes here</p>
+                <p class="upload-hint">or click to browse — PDF / DOCX, max 10MB each</p>
+                <input type="file" id="fileInput" multiple accept=".pdf,.docx" hidden>
+            </div>
+
+            <div class="file-list" id="fileList">
+                {% for resume in resumes %}
+                <div class="file-item">
+                    <span class="file-name">📄 {{ resume.original_filename or resume.filename }}</span>
+                    <span class="file-size">{{ resume.text_length }} chars</span>
+                    <button class="file-remove" onclick="removeResume('{{ resume.filename }}')">✕</button>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Right: Job Description -->
+        <div class="upload-column">
+            <h3>Job Description</h3>
+            <textarea
+                id="jdInput"
+                class="jd-textarea"
+                placeholder="Paste the job description here...
+
+Example:
+We are looking for a Senior Backend Developer with 3+ years of experience in Python, FastAPI, and cloud services (AWS/GCP). The candidate should have experience with REST APIs, databases (PostgreSQL), and CI/CD pipelines."
+            ></textarea>
+        </div>
+    </div>
+
+    <!-- Status & Actions -->
+    <div class="action-bar">
+        <div class="status-info">
+            <span id="resumeCount">{{ resume_count }} resumes uploaded</span>
+        </div>
+        <div class="action-buttons">
+            <button class="btn btn-secondary" onclick="clearAll()">Clear All</button>
+            <button class="btn btn-primary" onclick="saveAndAnalyze()">Save & Continue →</button>
+        </div>
+    </div>
+
+    <!-- Status Messages -->
+    <div id="statusBox" class="status-box"></div>
+</section>
+
+<script>
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const fileList = document.getElementById('fileList');
+const statusBox = document.getElementById('statusBox');
+const resumeCountEl = document.getElementById('resumeCount');
+const jdInput = document.getElementById('jdInput');
+
+// Click on drop zone opens file picker
+dropZone.addEventListener('click', () => fileInput.click());
+
+// File picker change
+fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+        uploadFiles(e.target.files);
+    }
+});
+
+// Drag & drop handlers
+['dragover', 'dragenter'].forEach(event => {
+    dropZone.addEventListener(event, (e) => {
+        e.preventDefault();
+        dropZone.classList.add('drag-over');
+    });
+});
+
+['dragleave', 'drop'].forEach(event => {
+    dropZone.addEventListener(event, (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+    });
+});
+
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (e.dataTransfer.files.length > 0) {
+        uploadFiles(e.dataTransfer.files);
+    }
+});
+
+// Upload files to backend
+async function uploadFiles(files) {
+    const formData = new FormData();
+    for (const file of files) {
+        formData.append('files', file);
+    }
+
+    showStatus('Uploading and parsing resumes...', 'info');
+
+    try {
+        const response = await fetch('/upload/resumes', {
+            method: 'POST',
+            body: formData,
+        });
+        const data = await response.json();
+
+        // Update UI
+        if (data.uploaded.length > 0) {
+            data.uploaded.forEach(file => {
+                addFileToList(file.filename, file.text_length);
+            });
+            showStatus(`Successfully uploaded ${data.uploaded.length} resume(s)`, 'success');
+        }
+
+        if (data.errors.length > 0) {
+            showStatus(`Errors:\n${data.errors.join('\n')}`, 'error');
+        }
+
+        resumeCountEl.textContent = `${data.total_stored} resumes uploaded`;
+    } catch (error) {
+        showStatus(`Upload failed: ${error.message}`, 'error');
+    }
+}
+
+// Add file to visual list
+function addFileToList(filename, textLength) {
+    const item = document.createElement('div');
+    item.className = 'file-item';
+    item.innerHTML = `
+        <span class="file-name">📄 ${filename}</span>
+        <span class="file-size">${textLength} chars</span>
+        <button class="file-remove" onclick="this.parentElement.remove()">✕</button>
+    `;
+    fileList.appendChild(item);
+}
+
+// Save JD and navigate forward
+async function saveAndAnalyze() {
+    const jdText = jdInput.value.trim();
+    if (!jdText) {
+        showStatus('Please paste a job description first.', 'error');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('jd_text', jdText);
+
+    try {
+        const response = await fetch('/upload/job-description', {
+            method: 'POST',
+            body: formData,
+        });
+        const data = await response.json();
+        showStatus('Job description saved. Ready for analysis!', 'success');
+
+       // Now trigger analysis
+        showStatus('Analyzing resumes against JD...', 'info');
+        try {
+            const analyzeRes = await fetch('/upload/analyze', { method: 'POST' });
+            const analyzeData = await analyzeRes.json();
+            showStatus(`Scored ${analyzeData.results.length} resumes. Redirecting...`, 'success');
+            setTimeout(() => window.location.href = '/dashboard', 1500);
+        } catch (err) {
+            showStatus(`Analysis failed: ${err.message}`, 'error');
+        }
+    } catch (error) {
+        showStatus(`Failed to save JD: ${error.message}`, 'error');
+    }
+}
+
+// Clear all resumes & JD
+async function clearAll() {
+    if (!confirm('Remove all uploaded resumes and JD?')) return;
+
+    try {
+        await fetch('/upload/clear', { method: 'DELETE' });
+        fileList.innerHTML = '';
+        jdInput.value = '';
+        resumeCountEl.textContent = '0 resumes uploaded';
+        showStatus('All data cleared.', 'info');
+    } catch (error) {
+        showStatus(`Failed to clear: ${error.message}`, 'error');
+    }
+}
+
+// Remove single resume
+async function removeResume(filename) {
+    try {
+        const response = await fetch(`/upload/resumes/${filename}`, { method: 'DELETE' });
+        const data = await response.json();
+        location.reload();
+    } catch (error) {
+        showStatus(`Failed to remove: ${error.message}`, 'error');
+    }
+}
+
+// Show status message
+function showStatus(message, type) {
+    statusBox.textContent = message;
+    statusBox.className = `status-box status-${type}`;
+    setTimeout(() => {
+        statusBox.className = 'status-box';
+        statusBox.textContent = '';
+    }, 5000);
+}
+</script>
+{% endblock %}

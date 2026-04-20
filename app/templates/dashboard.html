@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-section">
+    <div class="dash-header">
+        <div>
+            <h2>Candidate Dashboard</h2>
+            <p class="page-desc">
+                {% if has_results %}
+                    {{ total }} resumes analyzed and ranked
+                {% else %}
+                    No results yet. Upload resumes and a JD first.
+                {% endif %}
+            </p>
+        </div>
+        {% if has_results %}
+        <a href="/upload" class="btn btn-secondary">← Upload More</a>
+        {% endif %}
+    </div>
+
+    {% if has_results %}
+    <!-- Stats Row -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-label">Total</div>
+            <div class="stat-value blue">{{ total }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Strong Match</div>
+            <div class="stat-value green">{{ strong }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Moderate</div>
+            <div class="stat-value yellow">{{ moderate }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Weak</div>
+            <div class="stat-value red">{{ weak }}</div>
+        </div>
+    </div>
+
+    <!-- Candidate Cards -->
+    <div class="candidate-list">
+        {% for c in candidates %}
+        <div class="candidate-card {{ c.score.match_level }}">
+            <div class="card-header">
+                <div class="card-left">
+                    <span class="status-dot {{ c.score.match_level }}"></span>
+                    <div>
+                        <div class="candidate-name">{{ c.candidate_name }}</div>
+                        <div class="candidate-role">{{ c.job_title }}</div>
+                    </div>
+                </div>
+                <div class="score-badge {{ c.score.match_level }}">
+                    {{ c.score.final_score }}%
+                </div>
+            </div>
+
+            <div class="card-body">
+                <!-- Summary -->
+                <p class="candidate-summary">{{ c.summary }}</p>
+
+                <!-- Contact -->
+                <div class="candidate-meta">
+                    {% if c.email %}<span>📧 {{ c.email }}</span>{% endif %}
+                    {% if c.phone %}<span>📱 {{ c.phone }}</span>{% endif %}
+                    <span>📅 {{ c.experience_years }} yrs exp</span>
+                    {% if c.education %}<span>🎓 {{ c.education }}</span>{% endif %}
+                </div>
+
+                <!-- Skills -->
+                <div class="skills-section">
+                    <div class="skill-group">
+                        <span class="skill-label">Matched:</span>
+                        {% for skill in c.score.required_skills.matched %}
+                            <span class="skill-tag match">{{ skill }}</span>
+                        {% endfor %}
+                        {% for skill in c.score.preferred_skills.matched %}
+                            <span class="skill-tag bonus">{{ skill }}</span>
+                        {% endfor %}
+                    </div>
+                    {% if c.score.required_skills.missing %}
+                    <div class="skill-group">
+                        <span class="skill-label">Missing:</span>
+                        {% for skill in c.score.required_skills.missing %}
+                            <span class="skill-tag miss">{{ skill }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Score Breakdown -->
+                <div class="score-breakdown">
+                    <div class="score-item">
+                        <span>Required Skills</span>
+                        <div class="score-bar">
+                            <div class="score-fill" style="width: {{ c.score.required_skills.score }}%"></div>
+                        </div>
+                        <span class="score-num">{{ c.score.required_skills.score }}%</span>
+                    </div>
+                    <div class="score-item">
+                        <span>Preferred Skills</span>
+                        <div class="score-bar">
+                            <div class="score-fill" style="width: {{ c.score.preferred_skills.score }}%"></div>
+                        </div>
+                        <span class="score-num">{{ c.score.preferred_skills.score }}%</span>
+                    </div>
+                    <div class="score-item">
+                        <span>Experience</span>
+                        <div class="score-bar">
+                            <div class="score-fill" style="width: {{ c.score.experience.score }}%"></div>
+                        </div>
+                        <span class="score-num">{{ c.score.experience.score }}%</span>
+                    </div>
+                    <div class="score-item">
+                        <span>Education</span>
+                        <div class="score-bar">
+                            <div class="score-fill" style="width: {{ c.score.education.score }}%"></div>
+                        </div>
+                        <span class="score-num">{{ c.score.education.score }}%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% else %}
+    <div class="empty-state">
+        <p>No candidates scored yet.</p>
+        <a href="/upload" class="btn btn-primary">Upload Resumes →</a>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}
